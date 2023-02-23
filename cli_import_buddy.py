@@ -12,7 +12,7 @@ if __name__ == "__main__":
     num_arg = len(sys.argv)-1
     if num_arg == 0:
         # show user the correct usage if run without arguments
-        rprint(f"[underline red]\nMissing arguments, correct usage:[/]\n[bold cyan]{os.getcwd()}\\python[/] [bold yellow]{os.path.basename(sys.argv[0])}[/] [bold green]file_1.csv file_2.csv[/] [white]...[/] [bold green]file_N.csv[/]\n")
+        rprint(f"[bold underline red]\nMissing arguments, correct usage:[/]\n[bold italic cyan]{os.getcwd()}\\python[/] [bold italic yellow]{os.path.basename(sys.argv[0])}[/] [bold italic green]file_1.csv file_2.csv[/] [italic white]...[/] [bold green]file_N.csv[/]\n")
     else:
         # begin tool if arguments present
         console = Console()
@@ -38,12 +38,12 @@ if __name__ == "__main__":
             missing_col = [e for e in file_headers if e.startswith("Unnamed")]
             if len(missing_col) >= 1:
                 rprint(f"[white]... [/][yellow]warning:[/] [white]it looks like you forgot to name a column in your csv file: [yellow]{file}[/]")
-                rprint(f"[white]...[/][yellow] renaming: [/][white]\"{missing_col[0]}\" --> \"pngUrl\"[/]")
+                rprint(f"[white]...[/][yellow] renaming: [/][white]\"{missing_col[0]}\" --> [/][yellow]\"pngUrl\"[/]")
                 print("... the column name will be inferred this time, but its best practice to properly structure your data")
                 df_file.rename(columns={missing_col[0]: "pngUrl"}, inplace=True)
             print(f"... ready to import file \"{file}\" with random 10 row sample below:\n")
             print(df_file.sample(n=10))
-            rprint("\n[white]...[/] does the above sample of the data look correct? (y/N)")
+            rprint("\n[white]...[/] does the above sample of the data look correct?[bold cyan] (y/N)[/]")
             user_confirmation = input("... ").lower()
             while user_confirmation not in ("n", "y"):
                 rprint("[white]... [/][bold yellow]invalid response:[/] [white]please enter \"y\" to confirm or \"N\" to start over[/]")
@@ -63,11 +63,13 @@ if __name__ == "__main__":
                 validated_column_dtypes_list = []
                 for col in raw_column_dtypes:
                     validated_col_name = f"\"{col[0]}\"" # use parts & products csv headers as table headers for the purpose of this exercise, allowing a generic approach to import any csv table
-                    validated_col_dtype = f"{col[1]}".replace("object", "text").replace("int64", "integer").replace("float64", "float8") # rename dtypes from python to psql types
+                    validated_col_dtype = f"{col[1]}".replace("object", "text").replace("int64", "int8").replace("float64", "float8") # rename dtypes from python to psql types
+                    if validated_col_dtype.startswith("date"): # in the event a datetime is inferred from the csv, coerce it to text
+                        validated_col_dtype = "text"
                     validated_column_dtypes_list.append(f"{validated_col_name} {validated_col_dtype}")
                 # prepares generalized columns dtype matching for psql create statement by checking which col dtype pairing should be labelled as primary/foreign key using shape of input data
                 if len(validated_column_dtypes_list) <= 3:
-                    validated_column_dtypes_list = [x.replace("\"productId\" integer","\"productId\" integer primary key") for x in validated_column_dtypes_list]
+                    validated_column_dtypes_list = [x.replace("\"productId\" int8","\"productId\" int8 primary key") for x in validated_column_dtypes_list]
                 create_stg = ", ".join(validated_column_dtypes_list)
                 load_dotenv() # load env variables
                 DB_HOST = os.getenv("DB_HOST")
@@ -77,7 +79,8 @@ if __name__ == "__main__":
                 DB_CONNECTION = os.getenv("DB_CONNECTION")
                 psql_db_conn = psycopg2.connect(host=DB_HOST,database=DB_DATABASE,user=DB_USERNAME,password=DB_PASSWORD)
                 psql_c = psql_db_conn.cursor()
-                table_name = os.path.splitext(file)[0]
+                end_filepath = os.path.basename(file) # grabs end file path, ie: "C:\Users\Desktop\import_file.csv" --> "import_file.csv"
+                table_name = os.path.splitext(end_filepath)[0] # grabs name of file without ext/filetype, ie: "import_file.csv" --> "import_file"
                 create_stmt = f"""create table if not exists "{table_name}" ({create_stg});"""
                 psql_c.execute(f"drop table if exists \"{table_name}\"; ")
                 psql_db_conn.commit()
@@ -106,7 +109,7 @@ if __name__ == "__main__":
                 if len(matched_col) >= 1: # if potential foreign key found, break loop and return with matching column between i and i+1 tables
                     break
             rprint(f"[white]... [/][yellow]potential relation[/] found with column: [yellow]{next(iter(matched_col))}[/]") # extract item in set to display to the user to confirm
-            rprint("[white]... [/]would you like to define a relation using this column? (y/N)")
+            rprint("[white]... [/]would you like to define a relation using this column?[bold cyan] (y/N)[/]")
             user_confirmation = input("... ").lower()
             while user_confirmation not in ("n", "y"):
                 rprint("[white]... [/][bold yellow]invalid response:[/] [white]please enter \"y\" to confirm or \"N\" to ignore[/]")
@@ -121,7 +124,6 @@ if __name__ == "__main__":
                 relation_list = list(list(enumerate(tables_created.values())))
                 formatted_dir_dict = '\n'.join(f'[white]...[/][bold cyan] {key+1}: {value}[/]' for key, value in relation_map.items())
                 rprint(formatted_dir_dict)
-                print(f'... type the corresponding number and press [Enter]')
                 user_map_selection = input('... ')
                 while user_map_selection not in [str(i) for i in range(1,len(tables_created)+1)]:
                     rprint("[white]... [/][bold yellow]invalid response:[/] [white]please enter a valid option displayed above[/]")
@@ -149,15 +151,22 @@ if __name__ == "__main__":
                     print("")
         else:
             psql_db_conn.commit() # no further database transactions
-        today_datetime = datetime.now().strftime("%m-%d-%Y %H:%M:%S")
+        today_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         console.print("[bold cyan]-[/]" * console.width)
-        console.print(f"[bold cyan]Successfully completed processes at {today_datetime}[/]", justify="center")
+        console.print(f"[bold cyan]Successfully Completed {today_datetime}[/]", justify="center")
         console.print("[bold cyan]-[/]" * console.width)
         print("")
 
 """
-Version 1.0
+=====================================================================================================================================================================
+Version 1.1
+    - changed table name derivation to locate base path from input.csv, then extensionless to avoid awkward results when an absolute path is used
+    - added a coerce datetime to text check in the unlikely event a datetime dtype is inferred by pandas or numpy from the input file
+    - adjusted integer datatype inference from int4 to int8 when constructing table schema
+    - added bold cyan formatting to all terminal prompts that require user input, removed redundant prompt for table relation branch
+    - reformatted datetime to more closely fit sql standard, added yellow formatting to column being renamed after warning, bolded correct usage prompt
 
+Version 1.0
     - created read & write credential and spun up new dedicated psql instance for this project
     - changed import system to be generic over any csv instead of hardcoding for parts.csv & products.csv
     - changed dataframe display to derive from random sample for potential future use cases
@@ -167,4 +176,5 @@ Version 1.0
     - added rich formatting and try/except block for missing pk relation on defining block
     - added .env and environment variables and added extension to gitignore
 
+=====================================================================================================================================================================
 """
